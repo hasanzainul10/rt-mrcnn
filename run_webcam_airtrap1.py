@@ -1,3 +1,7 @@
+# Use python 3.7, because python 3.8> doesnt support tensorflow 1.x which maskrcnn use.
+# If use linux/mac pip uninstall pycocotools-windows and pip install pycocotools
+
+
 import os
 import sys
 import cv2
@@ -5,7 +9,8 @@ import time
 import imutils
 import numpy as np
 import mrcnn.model as modellib
-from mrcnn import utils, visualize
+from mrcnn import utils
+from mrcnn import visualize_area as visualize
 from imutils.video import WebcamVideoStream
 import random
 from mrcnn.config import Config
@@ -82,7 +87,7 @@ model.load_weights(COCO_MODEL_PATH, by_name=True)
 #                'keyboard', 'cell phone', 'microwave', 'oven', 'toaster',
 #                'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors',
 #                'teddy bear', 'hair drier', 'toothbrush']
-class_names = ['airtrap', 'airtrap', 'airtrap', 'airtrap', 'airtrap', 'airtrap', 'airtrap', 'airtrap', 'airtrap']
+class_names = ['BG','airtrap']
 
 colors = visualize.random_colors(len(class_names))
 
@@ -90,8 +95,8 @@ gentle_grey = (45, 65, 79)
 white = (255, 255, 255)
 
 OPTIMIZE_CAM = False
-SHOW_FPS = False
-SHOW_FPS_WO_COUNTER = True  # faster
+SHOW_FPS = True
+SHOW_FPS_WO_COUNTER = False  # faster
 PROCESS_IMG = True
 
 if OPTIMIZE_CAM:
@@ -124,15 +129,12 @@ while True:
         results = model.detect([frame])
         r = results[0]
 
-        # Run detection
-        masked_image = visualize.display_instances_10fps(frame, r['rois'], r['masks'],
-                                                         r['class_ids'], class_names, r['scores'], colors=colors,
-                                                         real_time=True)
-
         class_ids = r['class_ids']
         boxes = r['rois']
         masks = r['masks']
-        RATIO_PIXEL_TO_CM = 78  # 78 pixels are 1cm
+
+        # Need to change later or use a reference object
+        RATIO_PIXEL_TO_CM = 78
         RATIO_PIXEL_TO_SQUARE_CM = 78 * 78
 
         ## Get mask area
@@ -140,12 +142,27 @@ while True:
             print(boxes[i])
             x1, y1, x2, y2 = boxes[i]
             x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
-            print(class_ids[i])
+
+            p1 = (x1, y1)
+            p2 = (x2, y1)
+            p3 = (x1, y2)
+            p4 = (x2, y2)
+
+            x = (p1[0] + p2[0]) / 2
+            y = p1[1]
+            print(class_ids[0])
             area_px = np.reshape(r['masks'], (-1, r['masks'].shape[-1])).astype(np.float32).sum()
             area_cm = round(area_px / RATIO_PIXEL_TO_SQUARE_CM, 2)
             print(area_cm)
-            cv2.putText(masked_image, "A: {}cm^2".format(area_cm), (x1, y1), cv2.FONT_HERSHEY_PLAIN, 1,
-                        colors[class_ids[i]], lineType=cv2.LINE_AA)
+            # cv2.putText(masked_image, "A: {}cm^2".format(area_cm), (x1 + x2, y1 + y2), cv2.FONT_HERSHEY_PLAIN, 0.5,
+            #             (255, 255, 255), lineType=cv2.LINE_AA)
+
+        # Run detection
+        masked_image = visualize.display_instances_10fps(frame, r['rois'], r['masks'],
+                                                         r['class_ids'], class_names, r['scores'], colors=colors,
+                                                         real_time=True, area=area_cm)
+
+
 
     if PROCESS_IMG:
         s = masked_image
@@ -182,7 +199,7 @@ while True:
         cv2.putText(s, fps_caption, (width - ret[0], height - baseline),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, white, 1, lineType=cv2.LINE_AA)
 
-    s = cv2.resize(s, (1280, 720))
+    # s = cv2.resize(s, (1280, 720))
     cv2.imshow(SCREEN_NAME, s)
     cv2.waitKey(1)
     if cv2.waitKey(1) & 0xFF == ord('q'):
